@@ -7,7 +7,3 @@ dependencies:
     version: "^1.7.19"
   espressif/mqtt:
     version: "^1.0.0"
-  # Previously pulled transitively by esp_lvgl_adapter; required directly by
-  # p1s_camera_client (jpeg_dec_*) and ui.cpp (png_*).
-  espressif/esp_new_jpeg: "*"
-  espressif/libpng: "*"

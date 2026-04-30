@@ -6,7 +6,10 @@ dependencies.lock
 __pycache__/
 Official-hardware-examples/
 .vscode/
-tools/
+tools/*
+!tools/patches/
+!tools/patches/*.ps1
+!tools/package_initial_flash.py
 release/*
 !release/archive/
 release/archive/*

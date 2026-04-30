@@ -1159,17 +1159,27 @@ esp_err_t Ui::initialize() {
 
   portal_hint_boot_ms_ = static_cast<uint64_t>(esp_timer_get_time() / 1000ULL);
 
-  bsp_display_cfg_t display_cfg = BSP_DISPLAY_CFG_DEFAULT();
-  // Pin LVGL render task to core 1 so WiFi/BT on core 0 can't interrupt rendering.
-  display_cfg.task_affinity = 1;
-  display_cfg.rotation = BSP_DISPLAY_ROTATE_0;
-  // 48 lines per chunk avoids QSPI DMA TX underflow that full-frame
-  // PSRAM-sourced transfers caused (PSRAM cache miss latency can't refill
-  // the SPI FIFO at 80 MHz QSPI under WiFi load). Smart-wait in the BSP
-  // (one TE wait per frame) still prevents tearing because the 10 chunks
-  // are written in ~10 ms, well inside one 16.7 ms refresh.
-  display_cfg.buffer_height_lines = 0;  // 0 = use BSP default (48)
-  display_cfg.double_buffer = true;
+  bsp_display_cfg_t display_cfg = {
+      .lv_adapter_cfg = []() {
+        esp_lv_adapter_config_t cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG();
+        // Pin LVGL render task to core 1 so WiFi/BT on core 0 can't interrupt rendering.
+        cfg.task_core_id = 1;
+        return cfg;
+      }(),
+      .rotation = ESP_LV_ADAPTER_ROTATE_0,
+      // TE_SYNC is safe again: managed_components/espressif__esp_lvgl_adapter
+      // is locally patched to use bounded timeouts in te_sync_wait_for_vsync()
+      // and the SPI TX-done notify (lvgl_bridge_v9.c). Without TE on this
+      // panel + adapter v0.4.2, single PSRAM buffer tears badly and the
+      // unbounded LVGL flush rate steals CPU/PSRAM-bus from mbedTLS, which
+      // causes printer-MQTT TLS handshakes to time out (select() timeout).
+      .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TE_SYNC,
+      .touch_flags = {
+          .swap_xy = 0,
+          .mirror_x = 1,
+          .mirror_y = 1,
+      },
+  };
   apply_touch_rotation_flags(display_rotation_, &display_cfg);
 
   display_ = bsp_display_start_with_config(&display_cfg);
@@ -2197,8 +2207,9 @@ void Ui::build_ams_page(int unit_idx) {
     ams_tray_arrow_[unit_idx][i] = lv_obj_create(ams_tray_col_[unit_idx][i]);
     lv_obj_set_size(ams_tray_arrow_[unit_idx][i], 40, 25);
     make_transparent(ams_tray_arrow_[unit_idx][i]);
+    // bg_color carries the triangle color; bg_opa stays 0 so the OBJ background
+    // is invisible and only the triangle drawn in ams_arrow_draw_cb is visible.
     lv_obj_set_style_bg_color(ams_tray_arrow_[unit_idx][i], lv_color_hex(0x1F1F1F), 0);
-    lv_obj_set_style_bg_opa(ams_tray_arrow_[unit_idx][i], LV_OPA_COVER, 0);
     lv_obj_set_style_pad_all(ams_tray_arrow_[unit_idx][i], 0, 0);
     lv_obj_clear_flag(ams_tray_arrow_[unit_idx][i], LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(ams_tray_arrow_[unit_idx][i], LV_OBJ_FLAG_CLICKABLE);
@@ -2301,8 +2312,8 @@ void Ui::build_ams_page(int unit_idx) {
     ams_ext_arrow_ = lv_obj_create(ams_ext_col_);
     lv_obj_set_size(ams_ext_arrow_, 35, 23);
     make_transparent(ams_ext_arrow_);
+    // bg_color carries the triangle color; bg_opa stays 0 (see ams_arrow_draw_cb).
     lv_obj_set_style_bg_color(ams_ext_arrow_, lv_color_hex(0x1F1F1F), 0);
-    lv_obj_set_style_bg_opa(ams_ext_arrow_, LV_OPA_COVER, 0);
     lv_obj_set_style_pad_all(ams_ext_arrow_, 0, 0);
     lv_obj_clear_flag(ams_ext_arrow_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(ams_ext_arrow_, LV_OBJ_FLAG_CLICKABLE);
@@ -2497,14 +2508,12 @@ void Ui::render_ams_unit(int unit_idx, const PrinterSnapshot& snapshot, bool sho
       lv_obj_set_style_border_color(rect, lv_color_hex(0x555555), 0);
       lv_obj_set_style_outline_width(rect, 0, 0);
       if (has_error) {
-        // Red triangle on error (opacity pulses via timer).
+        // Red triangle on error (color pulses via timer).
         lv_obj_set_style_bg_color(arrow, lv_color_hex(0xEF4444), 0);
       } else if (tray.active) {
         lv_obj_set_style_bg_color(arrow, lv_color_hex(0x4ADE80), 0);
-        lv_obj_set_style_bg_opa(arrow, LV_OPA_COVER, 0);
       } else {
         lv_obj_set_style_bg_color(arrow, lv_color_hex(0x1F1F1F), 0);
-        lv_obj_set_style_bg_opa(arrow, LV_OPA_COVER, 0);
       }
       set_label_text_if_changed(ams_tray_type_[unit_idx][i],
                                 tray.material_type.empty() ? "--" : tray.material_type);
@@ -2544,7 +2553,6 @@ void Ui::render_ams_unit(int unit_idx, const PrinterSnapshot& snapshot, bool sho
         lv_obj_set_style_bg_color(arrow, lv_color_hex(0xEF4444), 0);
       } else {
         lv_obj_set_style_bg_color(arrow, lv_color_hex(0x1F1F1F), 0);
-        lv_obj_set_style_bg_opa(arrow, LV_OPA_COVER, 0);
       }
     }
   }
@@ -3473,7 +3481,7 @@ void Ui::wake_display() {
   screen_power_mode_ = ScreenPowerMode::kAwake;
   apply_brightness_policy();
   if (was_off) {
-    bsp_display_resume();
+    esp_lv_adapter_resume();
   }
 }
 
@@ -3550,9 +3558,9 @@ void Ui::update_power_save(bool on_battery, bool print_active) {
     // signal — that would permanently deadlock the worker.  Instead, abort
     // the screen-off transition and stay in the current power mode.
     if (going_off && !was_off) {
-      esp_err_t pause_ret = bsp_display_pause(1000);
+      esp_err_t pause_ret = esp_lv_adapter_pause(1000);
       if (pause_ret != ESP_OK) {
-        ESP_LOGW(kTag, "LVGL port stop failed (%s) — aborting screen-off",
+        ESP_LOGW(kTag, "LVGL worker pause timeout — aborting screen-off to avoid TE deadlock (%s)",
                  esp_err_to_name(pause_ret));
         // Treat a failed screen-off attempt like fresh activity so we don't
         // immediately hammer pause() again on the next main-loop iteration.
@@ -3565,7 +3573,7 @@ void Ui::update_power_save(bool on_battery, bool print_active) {
     apply_brightness_policy();
 
     if (was_off && !going_off) {
-      bsp_display_resume();
+      esp_lv_adapter_resume();
     }
   }
 }

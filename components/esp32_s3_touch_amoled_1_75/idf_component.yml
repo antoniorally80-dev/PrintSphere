@@ -13,8 +13,8 @@ dependencies:
   lvgl/lvgl: ">=8,<10"
   esp_lcd_co5300: "*"
   waveshare/esp_lcd_touch_cst9217: "*"
-  espressif/esp_lvgl_port:
-    version: "^2.6.0"
+  espressif/esp_lvgl_adapter:
+    version: "0.4.2"
     public: true
 
   esp_codec_dev:

@@ -10,18 +10,9 @@ CONFIG_SPIRAM_FETCH_INSTRUCTIONS=y
 CONFIG_SPIRAM_RODATA=y
 CONFIG_SPIRAM_XIP_FROM_PSRAM=y
 CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
-# Reserve 128 KB internal RAM for DMA staging + mbedTLS handshake (avoid the
-# int_largest=4352 cliff observed with the previous 96 KB reserve when LVGL
-# allocates large PSRAM buffers under mbedTLS pressure).
-CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=163840
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=98304
 # Move WiFi/LWIP buffers to PSRAM to free internal DMA-capable RAM for display SPI
 CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
-# Switch WiFi TX buffers from static internal pool (16 x ~1.6 KB ~ 25 KB locked
-# in DRAM) to dynamic, which combines with TRY_ALLOCATE_WIFI_LWIP to land them
-# in PSRAM on demand. Frees ~20 KB internal heap for LVGL/TLS handshake peaks.
-# CONFIG_ESP_WIFI_STATIC_TX_BUFFER is not set
-CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER=y
-CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=32
 CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 # CONFIG_MBEDTLS_HARDWARE_AES is not set
@@ -49,11 +40,13 @@ CONFIG_FREERTOS_HZ=1000
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 CONFIG_LV_OS_FREERTOS=y
+CONFIG_ESP_LVGL_ADAPTER_ENABLE_DECODER=y
 CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_USE_CLIB_STRING=y
 CONFIG_LV_USE_CLIB_SPRINTF=y
 CONFIG_LV_CACHE_DEF_SIZE=1048576
 CONFIG_LV_IMAGE_HEADER_CACHE_DEF_CNT=32
+CONFIG_ESP_LVGL_ADAPTER_PARTIAL_AUX_IMG_CACHE=y
 CONFIG_LV_DEF_REFR_PERIOD=16
 CONFIG_LV_OBJ_STYLE_CACHE=y
 CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=2
@@ -68,12 +61,6 @@ CONFIG_LV_FONT_MONTSERRAT_40=y
 CONFIG_LV_FONT_FMT_TXT_LARGE=y
 CONFIG_LV_USE_FONT_COMPRESSED=y
 CONFIG_LWIP_MAX_SOCKETS=16
-# Larger TCP receive mailbox absorbs MQTT bursts without dropping packets when
-# the LVGL flush task briefly outpaces the network stack.
-CONFIG_LWIP_TCP_RECVMBOX_SIZE=12
-# 10 s task watchdog tolerates rare TLS handshake bursts; LVGL flush waits are
-# now bounded by esp_lvgl_port itself.
-CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
 # Keep a single in-flight LCD transaction; IDF6 direct PSRAM DMA is sensitive
 # to bus pressure while TLS/HTTP/camera work is active.
 CONFIG_BSP_LCD_TRANS_QUEUE_DEPTH=1
