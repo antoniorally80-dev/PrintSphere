@@ -19,7 +19,7 @@
  *  BSP Capabilities
  **************************************************************************************************/
 
-#define BSP_CAPS_DISPLAY        1
+#define BSP_CAPS_DISPLAY        0
 #define BSP_CAPS_TOUCH          1
 #define BSP_CAPS_BUTTONS        0
 #define BSP_CAPS_AUDIO          1
@@ -33,8 +33,8 @@
  **************************************************************************************************/
 
 /* I2C */
-#define BSP_I2C_SCL           (GPIO_NUM_14)
-#define BSP_I2C_SDA           (GPIO_NUM_15)
+#define BSP_I2C_SCL           (GPIO_NUM_48)
+#define BSP_I2C_SDA           (GPIO_NUM_8)
 
 #define BSP_I2S_SCLK          (GPIO_NUM_9)
 #define BSP_I2S_MCLK          (GPIO_NUM_42)
